@@ -20,7 +20,6 @@ const loginBody = Joi.object({
 });
 
 const resetPasswordBody = Joi.object({
-  old_password: Joi.string().min(6).required(),
   password: Joi.string().min(6).required(),
   confirm_password: Joi.string().min(6).required(),
   userId: Joi.string().required(),
@@ -117,10 +116,6 @@ const service = {
     if(!user)
       return res.send({error: {message: "User does not exist"}});
     
-    // Check Password
-    const validOldPass = await bcrypt.compare(req.body.old_password, user.password);
-    if (!validOldPass) return res.send({ error: { message: "Old Password is invalid" }});
-
     let tokenDetails = await db.resetTokens.findOne({ userId: new ObjectId(req.body.userId) });
     if(!tokenDetails)
       return res.send({error: {message: "Token is invalid or expired"}});
