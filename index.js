@@ -5,9 +5,12 @@ require("dotenv").config();
 const db = require("./mongo");
 
 const app = express();
-const PORT = (process.env.PORT) ? (process.env.PORT) : 3000;
+const PORT = (process.env.PORT) ? (process.env.PORT) : 3001;
 
+const authRoutes = require("./routes/auth.routes");
 const authService = require("./services/auth.services");
+const appService = require("./services/app.services");
+
 
 (async function load() {
   await db.connect();
@@ -15,13 +18,16 @@ const authService = require("./services/auth.services");
   app.use(express.json());
   app.use(cors()); 
 
-  app.post("/auth/signup", (req, res) => authService.signUp(req, res));
-  app.post("/auth/signin", (req, res) => authService.signIn(req, res));
-  app.post("/auth/resetPassword/:email", (req, res) => authService.resetPassword(req, res));
-  app.post("/auth/changePassword", (req, res) => authService.changePassword(req, res));
+  app.use("/auth", authRoutes)
 
   app.use(authService.validateAccessToken);
   app.get("/user", (req, res) => authService.findById(req, res));
+
+  app.get("/app/urls", (req, res) => appService.getURLs(req, res));
+  app.get("/app/url/:id", (req, res) => appService.getURLFromId(req, res));
+  app.post("/app/url", (req, res) => appService.shorten(req, res));
+  app.put("/app/url/:id", (req, res) => appService.editLongURL(req, res));
+  app.delete("/app/url/:id", (req, res) => appService.editLongURL(req, res));
 
   app.listen(PORT, () => {
     console.log(`Server running at port ${PORT}`);

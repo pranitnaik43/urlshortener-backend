@@ -59,7 +59,7 @@ const service = {
 
     // Insert User to DB
     let userCreated = await this.createUser(body);
-    console.log(userCreated);
+    // console.log(userCreated);
 
     res.send({ success: { message: "Registered successfully" }});
   },
@@ -145,7 +145,7 @@ const service = {
   async validateAccessToken(req, res, next) {
     try {
       const token = req.headers["access-token"];
-      console.log(token);
+      // console.log(token);
       if (token) {
         var data = await jwt.verify(token, process.env.AUTH_SECRET);
         req.userId = data.userId;
