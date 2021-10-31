@@ -26,8 +26,7 @@ const appService = require("./services/app.services");
   app.get("/app/urls", (req, res) => appService.getURLs(req, res));
   app.get("/app/url/:id", (req, res) => appService.getURLFromId(req, res));
   app.post("/app/url", (req, res) => appService.shorten(req, res));
-  app.put("/app/url/:id", (req, res) => appService.editLongURL(req, res));
-  app.delete("/app/url/:id", (req, res) => appService.editLongURL(req, res));
+  app.delete("/app/url/:id", (req, res) => appService.deleteURL(req, res));
 
   app.listen(PORT, () => {
     console.log(`Server running at port ${PORT}`);

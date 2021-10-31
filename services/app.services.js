@@ -39,31 +39,6 @@ const service = {
       res.send({ success: { message: "URL shortened successfully" } });
     }
   },
-  // async editLongURL(req, res) {
-  //   let userId = req.userId; //added during JWT verification
-  //   let longURL = req.body.longURL;
-  //   let urlId = req.params.id;
-
-  //   let urlData = await db.urls.findOne({ _id: new ObjectId(urlId), userId: new ObjectId(userId) });
-  //   if(!urlData)
-  //     return res.send({ error: { message: "URL does not exist" } });
-  //   else 
-  //     if(urlData.longURL === longURL)  //means longURL not changed
-  //       return res.send({ success: { message: "Success" } });
-
-  //   if(!validUrl.isUri(longURL)) {
-  //     return res.send({ error: { message: "The given URL is invalid" } });
-  //   } else {
-  //     //check if the long URL exists in same other field
-  //     let longURLexists = await db.urls.findOne({ longURL, userId: new ObjectId(userId) });
-  //     if(longURLexists)
-  //       return res.send({ error: { message: "The given URL already exists" } });
-  //     //else
-  //     urlData.longURL = longURL; //update the long url
-  //     await db.urls.updateOne({ _id: new ObjectId(urlId) }, { $set: { ...urlData } });
-  //     res.send({ success: { message: "URL shortened successfully" } });
-  //   }
-  // },
   async deleteURL(req, res) {
     let userId = req.userId; //added during JWT verification
     let urlId = req.params.id;
