@@ -10,7 +10,7 @@ const service = {
     if(!id)
       return res.send({ error: { message: "Failed to fetch the data" } });
     let data = await db.urls.findOne({ _id: new ObjectId(id) });
-    console.log(data, id);
+    // console.log(data, id);
     res.send(data);
   },
   async getURLs(req, res) {
@@ -31,11 +31,9 @@ const service = {
       if(longURLexists)
         return res.send({ error: { message: "The given URL already exists" } });
       //else
-      shortURLkey = shortid.generate();
-      shortURL = process.env.SERVER_URL + "/" + shortURLkey;
+      shortURLcode = shortid.generate();
       let date = new Date();
-      let dateStr = date.toLocaleString();
-      await db.urls.insertOne({ userId: new ObjectId(userId), longURL, shortURL, createdAt: dateStr, count: 0 });
+      await db.urls.insertOne({ userId: new ObjectId(userId), longURL, shortURLcode, createdAt: date, count: 0, clickedTime: [] });
       res.send({ success: { message: "URL shortened successfully" } });
     }
   },
@@ -48,6 +46,21 @@ const service = {
       return res.send({ error: { message: "URL does not exist" } });
     await db.urls.deleteOne({ _id: new ObjectId(urlId) });
     res.send({ success: { message: "URL deleted successfully" } });
+  }, 
+  async redirect(req, res) {
+    let shortURLcode = req.params.code;
+
+    let urlData = await db.urls.findOne({ shortURLcode });
+    // console.log(shortURLcode, urlData);
+    if(!urlData) {
+      return res.send({ error: { message: "URL does not exist" } });
+    }
+    if(urlData.count!==undefined && urlData.count!==null)
+      urlData.count += 1;
+    if(urlData.clickedTime)
+      urlData.clickedTime.push(new Date());
+    await db.urls.updateOne({ shortURLcode }, { $set: { ...urlData } });
+    res.redirect(urlData.longURL);
   }
 }
 

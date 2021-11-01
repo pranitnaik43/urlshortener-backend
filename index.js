@@ -20,6 +20,8 @@ const appService = require("./services/app.services");
 
   app.use("/auth", authRoutes)
 
+  app.get("/re/:code", (req, res) => appService.redirect(req, res));
+
   app.use(authService.validateAccessToken);
   app.get("/user", (req, res) => authService.findById(req, res));
 
