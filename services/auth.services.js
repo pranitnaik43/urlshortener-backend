@@ -19,14 +19,24 @@ const loginBody = Joi.object({
   password: Joi.string().min(6).required(),
 });
 
-const resetPasswordBody = Joi.object({
+const changePasswordBody = Joi.object({
   password: Joi.string().min(6).required(),
   confirm_password: Joi.string().min(6).required(),
   userId: Joi.string().required(),
   token: Joi.string().required(),
 });
 
+const activateAccountBody = Joi.object({
+  userId: Joi.string().required(),
+  token: Joi.string().required(),
+});
+
 const max_token_expiry_time=3600; //1 hr
+
+const accountStatusValues = {
+  Active: "Active",
+  Pending: "Pending"
+}
 
 const service = {
   findByEmail(email) {
@@ -39,11 +49,8 @@ const service = {
       return res.send({ error: { message: "User not found" }});
     res.send(user);
   },
-  createUser(data) {
-    return db.users.insertOne(data);
-  },
   async signUp(req, res) {
-    const body = req.body;
+    let body = req.body;
 
     // Validate Request Body
     const { error } = await regBody.validate(req.body);
@@ -57,13 +64,30 @@ const service = {
     const salt = await bcrypt.genSalt(10);
     body.password = await bcrypt.hash(body.password, salt);
 
+    //create account activation token
+    let activationToken = crypto.randomBytes(32).toString("hex");
+    sendAccountActivationMail();
+    const salt = await bcrypt.genSalt(10);
+    const activationTokenHash = await bcrypt.hash(activationToken, salt);
+    body.activationTokenHash = activationTokenHash;
+    body.accountStatus = accountStatusValues.Pending;
+
     // Insert User to DB
-    let userCreated = await this.createUser(body);
-    // console.log(userCreated);
+    await db.users.insertOne({...data});
+
+    //mail the activation link
+    const activationLink = process.env.CLIENT_URL + '/login?token='+activationToken+'&id='+data._id;
+    let mailHTMLbody = "<p>Hi</p>" 
+      + "<p>Click on the following button to activate your account</p>"
+      + "<a href="+activationLink+">Activate account</a>"
+      + "<br/><br/>"
+      + "<div>Regards</div>"
+      + "<div>MyApp</div>"
+
+    mailService.sendMail(user.email,"Account Activation Request", mailHTMLbody, activationLink);
 
     res.send({ success: { message: "Registered successfully" }});
   },
-
   async signIn(req, res) {
     // Validate Request Body
     const { error } = await loginBody.validate(req.body);
@@ -74,6 +98,10 @@ const service = {
     if (!data)
       return res.send({ error: { message: "User doesn't exist. Please signup" }});
 
+    //check if account is activated
+    if(data.accountStatus !== accountStatusValues.Active)
+      return res.send({ error: { message: "Your account is not activated yet. Click on the verification link sent to activate your account" }});
+
     // Check Password
     const valid = await bcrypt.compare(req.body.password, data.password);
     if (!valid) return res.send({ error: { message: "User credentials doesn't match" }});
@@ -82,6 +110,31 @@ const service = {
     const token = await jwt.sign({ userId: data._id }, process.env.AUTH_SECRET);
 
     res.send({ success: { accessToken: token }});
+  },
+  async activateAccount(req, res) {
+    // Validate Request Body
+    const { error } = await activateAccountBody.validate(req.body);
+    if (error) return res.send({ error: { message: error.details[0].message }});
+
+    //fetch user
+    let user = await db.users.findOne({ _id: new ObjectId(req.body.userId) });
+    if(!user)
+      return res.send({error: {message: "User does not exist"}});
+    
+    if(!user.activationTokenHash)
+      return res.send({error: {message: "Token is invalid or expired"}});
+
+    //check if token is valid
+    const valid = await bcrypt.compare(req.body.token, user.activationTokenHash);
+
+    if(!valid) {
+      return res.send({error: {message: "Invalid Token"}});
+    } 
+
+    //delete the token
+    await db.users.deleteOne({ _id: new ObjectId(user._id), activationTokenHash });
+    
+    res.send({success: {message: "Account Activated Successfully"}});
   },
   async resetPassword(req, res) {
     //verify email
@@ -103,13 +156,20 @@ const service = {
 
     //send mail
     const resetLink = process.env.CLIENT_URL + '/changePassword?token='+resetToken+'&id='+user._id;
-    mailService.sendMail(user.email,"Password Reset Request", resetLink);
+    let mailHTMLbody = "<p>Hi</p>" 
+      + "<p>Click on the following button to reset your password</p>"
+      + "<a href="+resetLink+">Reset Password</a>"
+      + "<br/><br/>"
+      + "<div>Regards</div>"
+      + "<div>MyApp</div>"
+
+    mailService.sendMail(user.email,"Password Reset Request", mailHTMLbody, resetLink);
 
     res.send({success: {message: "Reset link sent to mail"}});
   },
   async changePassword(req, res) {
     // Validate Request Body
-    const { error } = await resetPasswordBody.validate(req.body);
+    const { error } = await changePasswordBody.validate(req.body);
     if (error) return res.send({ error: { message: error.details[0].message }});
 
     let user = await db.users.findOne({ _id: new ObjectId(req.body.userId) });
@@ -128,7 +188,7 @@ const service = {
     } else {
       console.log(Date.now(), tokenDetails.createdAt, Date.now() < tokenDetails.createdAt + 3600)
       if(Date.now() < tokenDetails.createdAt + max_token_expiry_time)
-        return res.send({error: {message: "token not found"}});
+        return res.send({error: {message: "Token expired"}});
     }
 
     //set new password
@@ -137,7 +197,7 @@ const service = {
     await db.users.updateOne({_id: new ObjectId(req.body.userId)}, { $set: { password: newPassword } });
 
     //delete the token
-    await db.resetTokens.deleteOne({ userId: user._id });
+    await db.resetTokens.deleteOne({ userId: new ObjectId(user._id) });
     
     res.send({success: {message: "Password changed Successfully"}});
 
@@ -145,11 +205,19 @@ const service = {
   async validateAccessToken(req, res, next) {
     try {
       const token = req.headers["access-token"];
-      // console.log(token);
+      // verify access token
       if (token) {
-        var data = await jwt.verify(token, process.env.AUTH_SECRET);
-        req.userId = data.userId;
-        next();
+        let data = await jwt.verify(token, process.env.AUTH_SECRET);
+        let userId = data.userId;
+        let user = await db.users.findOne({ _id: new ObjectId(userId) });
+
+        if(user.accountStatus===accountStatusValues.Active) {
+          req.userId = userId;
+          next();
+        }
+        else {
+          res.send({ error: { message: "Your account is not activated yet. Click on the verification link sent to activate your account" }});
+        }
       } else {
         res.send({ error: { message: "Access Denied" }});
       }

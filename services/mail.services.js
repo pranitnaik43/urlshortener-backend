@@ -9,20 +9,19 @@ const transporter = nodemailer.createTransport({
 });
 // console.log(password);
 
-let mailOptions = {
+let mailOptionsTemplate = {
   from: process.env.EMAIL_FROM,
   to: '',
   subject: '',
   html: ''
 };
 
-let resetMailBody = "<p>Hi</p><p>Following is the link to reset your password</p>"
-
 const service = {
-  sendMail(email_to, subject, resetLink) {
+  sendMail(email_to, subject, htmlBody, resetLink) {
+    mailOptions = {...mailOptionsTemplate};
     mailOptions.to = email_to;
     mailOptions.subject = subject;
-    mailOptions.html = resetMailBody + "<a href="+resetLink+">Reset Password</a></br>";
+    mailOptions.html = htmlBody;
     transporter.sendMail(mailOptions, function(error, info){
       if (error) {
         console.log(error);
