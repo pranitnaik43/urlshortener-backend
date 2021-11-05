@@ -27,7 +27,7 @@ const changePasswordBody = Joi.object({
 });
 
 const activateAccountBody = Joi.object({
-  userId: Joi.string().required(),
+  email: Joi.string().required(),
   token: Joi.string().required(),
 });
 
@@ -66,25 +66,23 @@ const service = {
 
     //create account activation token
     let activationToken = crypto.randomBytes(32).toString("hex");
-    sendAccountActivationMail();
-    const salt = await bcrypt.genSalt(10);
     const activationTokenHash = await bcrypt.hash(activationToken, salt);
     body.activationTokenHash = activationTokenHash;
     body.accountStatus = accountStatusValues.Pending;
 
     // Insert User to DB
-    await db.users.insertOne({...data});
+    await db.users.insertOne({...body});
 
     //mail the activation link
-    const activationLink = process.env.CLIENT_URL + '/login?token='+activationToken+'&id='+data._id;
+    const activationLink = process.env.CLIENT_URL + '/login?token='+activationToken+'&email='+body.email;
     let mailHTMLbody = "<p>Hi</p>" 
-      + "<p>Click on the following button to activate your account</p>"
+      + "<p>Click on the following link to activate your account</p>"
       + "<a href="+activationLink+">Activate account</a>"
       + "<br/><br/>"
       + "<div>Regards</div>"
       + "<div>MyApp</div>"
 
-    mailService.sendMail(user.email,"Account Activation Request", mailHTMLbody, activationLink);
+    mailService.sendMail(body.email,"Account Activation", mailHTMLbody, activationLink);
 
     res.send({ success: { message: "Registered successfully" }});
   },
@@ -100,7 +98,7 @@ const service = {
 
     //check if account is activated
     if(data.accountStatus !== accountStatusValues.Active)
-      return res.send({ error: { message: "Your account is not activated yet. Click on the verification link sent to activate your account" }});
+      return res.send({ error: { message: "Your account is not activated yet. Click on the verification link in your email to activate your account" }});
 
     // Check Password
     const valid = await bcrypt.compare(req.body.password, data.password);
@@ -117,9 +115,14 @@ const service = {
     if (error) return res.send({ error: { message: error.details[0].message }});
 
     //fetch user
-    let user = await db.users.findOne({ _id: new ObjectId(req.body.userId) });
+    let user = await db.users.findOne({ email: req.body.email });
+    // console.log(user);
     if(!user)
       return res.send({error: {message: "User does not exist"}});
+    
+    //check if account is already approved
+    if(user.accountStatus===accountStatusValues.Active)
+      return res.send({success: {message: "Account is already activated"}});
     
     if(!user.activationTokenHash)
       return res.send({error: {message: "Token is invalid or expired"}});
@@ -131,8 +134,11 @@ const service = {
       return res.send({error: {message: "Invalid Token"}});
     } 
 
-    //delete the token
-    await db.users.deleteOne({ _id: new ObjectId(user._id), activationTokenHash });
+    //update account status
+    user.accountStatus = accountStatusValues.Active;
+    user.activationTokenHash = null;
+    // console.log(user);
+    await db.users.updateOne({ _id: new ObjectId(user._id)}, { $set: { ...user } });
     
     res.send({success: {message: "Account Activated Successfully"}});
   },
@@ -216,7 +222,7 @@ const service = {
           next();
         }
         else {
-          res.send({ error: { message: "Your account is not activated yet. Click on the verification link sent to activate your account" }});
+          res.send({ error: { message: "Your account is not activated yet. Click on the verification link in your email to activate your account" }});
         }
       } else {
         res.send({ error: { message: "Access Denied" }});
